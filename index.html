@@ -1,0 +1,140 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<title>Days</title>
+<link rel="icon" href="data:,">
+<meta name="description" content="Days: a poem in seven photographs. Turn around to read it.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@400;500&display=swap" rel="stylesheet">
+<script src="aframe.min.js"></script>
+<script src="photos.js"></script>
+<style>
+  html, body { margin: 0; height: 100%; background: #0b0f1a; overflow: hidden; }
+  #start {
+    position: fixed; inset: 0; z-index: 10;
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    gap: 26px; padding: 32px; text-align: center;
+    background: radial-gradient(ellipse at 50% 38%, #3a3022 0%, #0b0f1a 72%);
+    color: #f4ead2; font-family: "Cormorant Garamond", Georgia, serif;
+    transition: opacity .9s ease;
+  }
+  #start.gone { opacity: 0; pointer-events: none; }
+  #start h1 { margin: 0; font-weight: 500; font-size: clamp(64px, 22vw, 120px); letter-spacing: .14em; padding-left: .14em; }
+  #start p  { margin: 0; font-size: 20px; line-height: 1.45; max-width: 21em; opacity: .88; }
+  #go {
+    font: 500 20px "Cormorant Garamond", Georgia, serif; color: #1a1408; background: #f1d58c;
+    border: 0; border-radius: 999px; padding: 14px 44px; cursor: pointer; min-height: 48px;
+  }
+  #go:focus-visible { outline: 3px solid #fff; outline-offset: 3px; }
+  #go[disabled] { opacity: .55; cursor: default; }
+  #hint {
+    position: fixed; left: 0; right: 0; bottom: 74px; z-index: 5; text-align: center;
+    color: #f4ead2; font: 400 20px "Cormorant Garamond", Georgia, serif; letter-spacing: .05em;
+    opacity: 0; transition: opacity 1s ease; pointer-events: none; text-shadow: 0 1px 8px rgba(0,0,0,.75);
+  }
+  #hint.show { opacity: .92; }
+  @media (prefers-reduced-motion: reduce) { #start, #hint { transition: none; } }
+</style>
+</head>
+<body>
+
+<div id="start">
+  <h1>DAYS</h1>
+  <p>Seven photographs hang around you.<br>Turn slowly, all the way around.</p>
+  <button id="go" type="button" disabled>Loading…</button>
+</div>
+<div id="hint">Turn around, or drag to look</div>
+
+<a-scene id="scene"
+         vr-mode-ui="enabled: false"
+         device-orientation-permission-ui="enabled: false"
+         renderer="colorManagement: true; antialias: true"
+         loading-screen="enabled: false">
+  <a-sky id="sky" color="#0b0f1a"></a-sky>
+  <a-entity id="camera" camera="fov: 72"
+            look-controls="touchEnabled: true; magicWindowTrackingEnabled: true; reverseMouseDrag: false"
+            wasd-controls="enabled: false" position="0 1.6 0"></a-entity>
+  <a-entity id="ring"></a-entity>
+</a-scene>
+
+<script>
+/* Seven photographs, in the order of the poem (embedded in photos.js; photos/1.jpg ... 7.jpg are the same pictures as plain files)
+   The poem text is part of each picture. */
+const COUNT   = 7;
+const RADIUS  = 3.0;   // metres from the viewer to each picture
+const HEIGHT  = 2.8;   // picture height in metres
+const EYE     = 1.6;
+
+function skyTexture() {
+  const c = document.createElement('canvas'); c.width = 16; c.height = 512;
+  const x = c.getContext('2d');
+  const g = x.createLinearGradient(0, 0, 0, 512);
+  g.addColorStop(0,   '#06090f');
+  g.addColorStop(.55, '#121826');
+  g.addColorStop(.82, '#241f2b');
+  g.addColorStop(1,   '#31282c');
+  x.fillStyle = g; x.fillRect(0, 0, 16, 512);
+  return c;
+}
+
+function loadImage(src) {
+  return new Promise(res => {
+    const im = new Image();
+    im.onload  = () => res(im);
+    im.onerror = () => res(null);
+    im.src = src;
+  });
+}
+
+async function build() {
+  const skyCanvas = skyTexture(); skyCanvas.id = 'skyTex'; skyCanvas.style.display = 'none';
+  document.body.appendChild(skyCanvas);
+  document.getElementById('sky').setAttribute('material', { shader: 'flat', src: '#skyTex' });
+
+  const ring = document.getElementById('ring');
+  const step = 360 / COUNT;
+  const images = await Promise.all(Array.from({ length: COUNT }, (_, i) => loadImage((window.PHOTOS || [])[i] || `photos/${i + 1}.jpg`)));
+
+  images.forEach((img, i) => {
+    const aspect = img ? img.naturalWidth / img.naturalHeight : 0.75;
+    const W = HEIGHT * aspect;
+
+    const cv = document.createElement('canvas');
+    cv.width = img ? img.naturalWidth : 900; cv.height = img ? img.naturalHeight : 1200;
+    cv.id = `pic${i}`; cv.style.display = 'none';
+    const ctx = cv.getContext('2d');
+    if (img) ctx.drawImage(img, 0, 0);
+    else { ctx.fillStyle = '#1b2438'; ctx.fillRect(0, 0, cv.width, cv.height); }
+    document.body.appendChild(cv);
+
+    const theta = i * step, rad = theta * Math.PI / 180;
+    const pic = document.createElement('a-plane');
+    pic.setAttribute('position', `${(RADIUS * Math.sin(rad)).toFixed(3)} ${EYE + .15} ${(-RADIUS * Math.cos(rad)).toFixed(3)}`);
+    pic.setAttribute('rotation', `0 ${-theta} 0`);
+    pic.setAttribute('width', W); pic.setAttribute('height', HEIGHT);
+    pic.setAttribute('material', { shader: 'flat', src: `#pic${i}`, side: 'double' });
+    ring.appendChild(pic);
+  });
+}
+
+const scene = document.getElementById('scene');
+const go = document.getElementById('go');
+const ready = new Promise(r => scene.hasLoaded ? r() : scene.addEventListener('loaded', r));
+ready.then(build).then(() => { go.disabled = false; go.textContent = 'Start'; document.body.dataset.ready = '1'; });
+
+go.addEventListener('click', async () => {
+  // iOS asks for motion access only after a tap
+  if (typeof DeviceOrientationEvent !== 'undefined' && typeof DeviceOrientationEvent.requestPermission === 'function') {
+    try { await DeviceOrientationEvent.requestPermission(); } catch (e) {}
+  }
+  document.getElementById('start').classList.add('gone');
+  const hint = document.getElementById('hint');
+  setTimeout(() => hint.classList.add('show'), 900);
+  setTimeout(() => hint.classList.remove('show'), 5500);
+});
+</script>
+</body>
+</html>
